@@ -11,6 +11,7 @@
 #include <pow.h>
 #include <tinyformat.h>
 #include <uint256.h>
+#include <hash.h>
 
 #include <vector>
 
@@ -205,6 +206,9 @@ public:
 
     //! Verification status of this block. See enum BlockStatus
     uint32_t nStatus;
+	
+    //! Used alghoritm to calculate hash of block
+    HASH_TYPE nHashAlghoritm;
 
     //! block header
     int32_t nVersion;

@@ -2870,7 +2870,7 @@ CBlockIndex* CChainState::AddToBlockIndex(const CBlockHeader& block)
     pindexNew->RaiseValidity(BLOCK_VALID_TREE);
     if (pindexBestHeader == nullptr || pindexBestHeader->nChainWork < pindexNew->nChainWork)
         pindexBestHeader = pindexNew;
-
+    pindexNew->nHashAlghoritm = (HASH_TYPE) (pindexNew->pprev->nHashAlghoritm == HASH_TYPE::QSHA256 ? 0 : (int) pindexNew->pprev->nHashAlghoritm + 1);
     setDirtyBlockIndex.insert(pindexNew);
 
     return pindexNew;

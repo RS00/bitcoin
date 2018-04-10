@@ -9,10 +9,23 @@
 #include <tinyformat.h>
 #include <utilstrencodings.h>
 #include <crypto/common.h>
+#include <validation.h>
 
 uint256 CBlockHeader::GetHash() const
 {
-    return SerializeHash(*this);
+    if (!this->hashPrevBlock.IsNull()) {
+        CBlockIndex *pprevBlock = LookupBlockIndex(this->hashPrevBlock);
+        if (pprevBlock != nullptr) {
+            HASH_TYPE nNewAlghoritm = (HASH_TYPE) (pprevBlock->nHashAlghoritm == HASH_TYPE::QSHA256 ? 0 : (int) pprevBlock->nHashAlghoritm + 1);
+            return SerializeHash(*this, SER_GETHASH, PROTOCOL_VERSION, nNewAlghoritm);
+        }
+        else {
+            return SerializeHash(*this);
+        }
+    }
+    else {
+        return SerializeHash(*this);
+    }
 }
 
 std::string CBlock::ToString() const

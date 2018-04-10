@@ -12,10 +12,16 @@
 #include <serialize.h>
 #include <uint256.h>
 #include <version.h>
-
 #include <vector>
 
 typedef uint256 ChainCode;
+
+enum HASH_TYPE
+{
+    DSHA256,
+    TSHA256,
+    QSHA256,
+};
 
 /** A hasher class for Bitcoin's 256-bit hash (double SHA-256). */
 class CHash256 {
@@ -24,10 +30,66 @@ private:
 public:
     static const size_t OUTPUT_SIZE = CSHA256::OUTPUT_SIZE;
 
-    void Finalize(unsigned char hash[OUTPUT_SIZE]) {
+    virtual void Finalize(unsigned char hash[OUTPUT_SIZE]) {
         unsigned char buf[CSHA256::OUTPUT_SIZE];
         sha.Finalize(buf);
         sha.Reset().Write(buf, CSHA256::OUTPUT_SIZE).Finalize(hash);
+    }
+	
+    virtual ~CHash256() {};
+
+    virtual CHash256& Write(const unsigned char *data, size_t len) {
+        sha.Write(data, len);
+        return *this;
+    }
+
+    virtual CHash256& Reset() {
+        sha.Reset();
+        return *this;
+    }
+};
+
+/** A hasher class for Bitcoin's 256-bit hash (triple SHA-256). */
+class CHashTriple256 : public CHash256 {
+private:
+    CSHA256 sha;
+public:
+    static const size_t OUTPUT_SIZE = CSHA256::OUTPUT_SIZE;
+
+    void Finalize(unsigned char hash[OUTPUT_SIZE]) {
+        unsigned char buf1[CSHA256::OUTPUT_SIZE];
+        unsigned char buf2[CSHA256::OUTPUT_SIZE];
+        sha.Finalize(buf1);
+        sha.Reset().Write(buf1, CSHA256::OUTPUT_SIZE).Finalize(buf2);
+        sha.Reset().Write(buf2, CSHA256::OUTPUT_SIZE).Finalize(hash);
+    }
+
+    CHash256& Write(const unsigned char *data, size_t len) {
+        sha.Write(data, len);
+        return *this;
+    }
+
+    CHash256& Reset() {
+        sha.Reset();
+        return *this;
+    }
+};
+
+/** A hasher class for Bitcoin's 256-bit hash (quadriple SHA-256). */
+class CHashQuadriple256 : public CHash256 {
+private:
+    CSHA256 sha;
+public:
+    static const size_t OUTPUT_SIZE = CSHA256::OUTPUT_SIZE;
+
+    void Finalize(unsigned char hash[OUTPUT_SIZE]) {
+        unsigned char buf1[CSHA256::OUTPUT_SIZE];
+        unsigned char buf2[CSHA256::OUTPUT_SIZE];
+        unsigned char buf3[CSHA256::OUTPUT_SIZE];
+        sha.Finalize(buf1);
+        sha.Reset().Write(buf1, CSHA256::OUTPUT_SIZE).Finalize(buf2);
+        sha.Reset().Write(buf2, CSHA256::OUTPUT_SIZE).Finalize(buf3);
+        sha.Reset().Write(buf3, CSHA256::OUTPUT_SIZE).Finalize(hash);
     }
 
     CHash256& Write(const unsigned char *data, size_t len) {
@@ -116,25 +178,36 @@ inline uint160 Hash160(const prevector<N, unsigned char>& vch)
 class CHashWriter
 {
 private:
-    CHash256 ctx;
+    CHash256 *ctx;
 
     const int nType;
     const int nVersion;
 public:
 
-    CHashWriter(int nTypeIn, int nVersionIn) : nType(nTypeIn), nVersion(nVersionIn) {}
+    CHashWriter(int nTypeIn, int nVersionIn) : nType(nTypeIn), nVersion(nVersionIn) {
+        ctx = new CHash256();
+    }
+	
+    ~CHashWriter() {
+        if (ctx)
+            delete ctx;
+    }
 
     int GetType() const { return nType; }
     int GetVersion() const { return nVersion; }
 
     void write(const char *pch, size_t size) {
-        ctx.Write((const unsigned char*)pch, size);
+        if (this->ctx == nullptr)
+            this->ctx = new CHash256();
+        ctx->Write((const unsigned char*)pch, size);
     }
 
     // invalidates the object
     uint256 GetHash() {
+        if (this->ctx == nullptr)
+            this->ctx = new CHash256();
         uint256 result;
-        ctx.Finalize((unsigned char*)&result);
+        ctx->Finalize((unsigned char*)&result);
         return result;
     }
 
@@ -143,6 +216,26 @@ public:
         // Serialize to this stream
         ::Serialize(*this, obj);
         return (*this);
+    }
+	
+    void SetHashAlghoritm(HASH_TYPE nType) {
+        if (this->ctx)
+            delete this->ctx;
+        switch (nType)
+        {
+            case HASH_TYPE::DSHA256: {
+                this->ctx = new CHash256();
+                break;
+            }
+            case HASH_TYPE::TSHA256: {
+                this->ctx = new CHashTriple256();
+                break;
+            }
+            case HASH_TYPE::QSHA256: {
+                this->ctx = new CHashQuadriple256();
+                break;
+            }
+        }
     }
 };
 
@@ -181,11 +274,12 @@ public:
     }
 };
 
-/** Compute the 256-bit hash of an object's serialization. */
+/** Compute the 256-bit hash(DSHA-256) of an object's serialization. */
 template<typename T>
-uint256 SerializeHash(const T& obj, int nType=SER_GETHASH, int nVersion=PROTOCOL_VERSION)
+uint256 SerializeHash(const T& obj, int nType=SER_GETHASH, int nVersion=PROTOCOL_VERSION, HASH_TYPE nHashAlghoritm=HASH_TYPE::DSHA256)
 {
     CHashWriter ss(nType, nVersion);
+    ss.SetHashAlghoritm(nHashAlghoritm);
     ss << obj;
     return ss.GetHash();
 }
